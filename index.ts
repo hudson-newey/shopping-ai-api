@@ -1,5 +1,6 @@
 const { Configuration, OpenAIApi } = require("openai");
 const express = require("express");
+const cors = require('cors');
 require("dotenv").config();
 
 const app = express();
@@ -13,15 +14,19 @@ const configuration = new Configuration({
 });
 const openai = new OpenAIApi(configuration);
 
-app.get("/", async (req, res) => {
+app.use(cors()); // Add CORS middleware here
+
+app.get("/api/", async (req, res) => {
   const { query } = req;
 
   if (!query?.q) {
     res.send("Error: Bad format");
   } else {
+    console.log(`request: ${query.q}`);
+
     const chatCompletion = await openai.createChatCompletion({
       model: "gpt-3.5-turbo",
-      messages: [{role: "user", content: promptPrepend + query.q}],
+      messages: [{ role: "user", content: promptPrepend + query.q }],
     });
     res.send(chatCompletion.data.choices[0].message);
   }
