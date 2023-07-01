@@ -8,3 +8,10 @@ To run:
 $ npm start
 >
 ```
+
+Built using:
+
+* NodeJS
+* ExpressJS
+* Redis
+* OpenAI GPT-3.5 API
