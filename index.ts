@@ -20,7 +20,14 @@ const openai = new OpenAIApi(configuration);
 app.use(cors()); // Add CORS middleware here
 
 function toDbKey(message: string): string {
-  return message.replace(" ", "-");
+  // reducing the message to its most descriptive components increases the chance of a cache hit
+  message = message.trim()
+    .toLowerCase()
+    .replace(/[^\w\s]|_/g, "")
+    .replace(/\s+/g, " ")
+    .replace(" ", "-");
+
+  return message;
 }
 
 app.get("/api/", async (req, res) => {
