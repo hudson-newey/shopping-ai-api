@@ -1,5 +1,4 @@
 const { Configuration, OpenAIApi } = require("openai");
-const { MongoClient, ServerApiVersion } = require("mongodb");
 const express = require("express");
 const cors = require("cors");
 const redis = require("redis");
@@ -10,18 +9,13 @@ interface ChatMessage {
   content: string;
 }
 
-let chatHistory: ChatMessage[] = [];
+interface Session {
+  id: string;
+  history: ChatMessage[];
+}
 
-const mongoUsername = process.env.MONGO_USERNAME;
-const mongoPassword = process.env.MONGO_PASSWORD;
-const mongoUri = `mongodb+srv://${mongoUsername}:${mongoPassword}@mainhistory.czfnzcc.mongodb.net/?retryWrites=true&w=majority`;
-const mongoClient = new MongoClient(mongoUri, {
-  serverApi: {
-    version: ServerApiVersion.v1,
-    strict: true,
-    deprecationErrors: true,
-  }
-});
+let sessions: Session[] = [];
+const anonymousSessionId = "-1";
 
 const redisClient = redis.createClient();
 const expressApp = express();
@@ -38,21 +32,10 @@ const openai = new OpenAIApi(configuration);
 
 expressApp.use(cors());
 
-// to check that the user has access to the mongo instance, we ping it on initialization
-async function pingMongo() {
-  try {
-    await mongoClient.connect();
-    await mongoClient.db("admin").command({ ping: 1 });
-    console.log("Pinged your deployment. You successfully connected to MongoDB!");
-  } finally {
-    await mongoClient.close();
-    mongoUri;
-  }
-}
-
 function toDbKey(message: string): string {
   // reducing the message to its most descriptive components increases the chance of a cache hit
-  message = message.trim()
+  message = message
+    .trim()
     .toLowerCase()
     .replace(/[^\w\s]|_/g, "")
     .replace(/\s+/g, " ")
@@ -61,11 +44,113 @@ function toDbKey(message: string): string {
   return message;
 }
 
+function getSessionHistory(requestedSession: string): ChatMessage[] {
+  // is an anonymous requestedSession
+  if (requestedSession === "-1") {
+    return [];
+  }
+
+  sessions.forEach((session: Session) => {
+    if (session.id === requestedSession) {
+      return session.history;
+    }
+  });
+
+  console.error(`Could not find session: ${requestedSession}`);
+  return [];
+}
+
+function removeSession(sessionId: string) {
+  sessions = sessions.filter((session: Session) => session.id !== sessionId);
+}
+
+function updateSession(role: string, content: string, sessionId: string) {
+  const currentSessionHistory = getSessionHistory(sessionId);
+
+  const newSessionHistory: Session = {
+    id: sessionId,
+    history: [
+      ...currentSessionHistory,
+      {
+        role,
+        content,
+      },
+    ],
+  };
+
+  removeSession(sessionId);
+
+  sessions.push(newSessionHistory);
+}
+
+function sessionIdExists(sessionId: string): boolean {
+  sessions.forEach((session: Session) => {
+    if (session.id === sessionId) {
+      return true;
+    }
+  });
+
+  return false;
+}
+
+function getNewSession(): string {
+  // get a random 36 character string
+  let newSessionId = Math.random().toString(36).substring(2, 15);
+
+  while (sessionIdExists(newSessionId)) {
+    newSessionId = Math.random().toString(36).substring(2, 15);
+  }
+
+  sessions.push({
+    id: newSessionId,
+    history: [],
+  });
+
+  return newSessionId;
+}
+
 // the root directory should always redirect back to the client site
 // this is to add another client access point and to help users navigate to the correct site
 // we may also be able to use this endpoint as a redirect/shortened URL in the future
 expressApp.get("/", (_req, res) => {
-  res.redirect(process.env.CLIENT_URL);
+  res.redirect(process.env.CLIENT_ENDPOINT);
+});
+
+expressApp.get("/session/", async (req, res) => {
+  const { query } = req;
+  const session = query?.v;
+
+  if (!session) {
+    res.send("Error 101: Bad format");
+    return;
+  }
+
+  const sessionHistory = {
+    session,
+    content: getSessionHistory(session),
+  };
+
+  res.send(sessionHistory);
+});
+
+expressApp.get("/session/clear", async (req, res) => {
+  const { query } = req;
+  const sessionId = query?.v;
+
+  if (!sessionId) {
+    res.send("Error 101: Bad format");
+    return;
+  }
+
+  sessions = sessions.filter((session: Session) => session.id !== sessionId);
+});
+
+expressApp.get("/session/new", async (_req, res) => {
+  const newSessionId = getNewSession();
+
+  res.send({
+    content: newSessionId,
+  });
 });
 
 expressApp.get("/api/", async (req, res) => {
@@ -73,13 +158,18 @@ expressApp.get("/api/", async (req, res) => {
 
   const userQuery = query?.q;
 
+  // if the session is -1, it is an anonymous session
+  const session = query?.v ?? anonymousSessionId;
+
   if (!userQuery) {
     res.send("Error 101: Bad format");
   } else {
     console.log(`request: ${query.q}`);
 
     // check if the response has been cached
-    const hasCachedResponse: boolean = await redisClient.exists(toDbKey(userQuery));
+    const hasCachedResponse: boolean = await redisClient.exists(
+      toDbKey(userQuery)
+    );
 
     // if the response has not been cached, we fetch a new response and cache it
     if (hasCachedResponse) {
@@ -87,21 +177,23 @@ expressApp.get("/api/", async (req, res) => {
 
       const cachedResponse = await redisClient.get(toDbKey(userQuery));
 
+      if (session !== anonymousSessionId) {
+        updateSession("user", userQuery, session);
+        updateSession("assistant", cachedResponse, session);  
+      }
+
       res.send({
         role: "cache",
         content: cachedResponse,
       });
-
-      chatHistory.push({ role: "user", content: userQuery });
-      chatHistory.push({ role: "assistant", content: cachedResponse });
     } else {
       console.debug("fetching new response");
       // fetch a new response from the api
       const chatCompletion = await openai.createChatCompletion({
         model: "gpt-3.5-turbo",
         messages: [
-          ...chatHistory,
-          { role: "user", content: promptPrepend + userQuery }
+          ...getSessionHistory(session),
+          { role: "user", content: promptPrepend + userQuery + promptPrepend },
         ],
       });
 
@@ -113,21 +205,22 @@ expressApp.get("/api/", async (req, res) => {
       // cache the response
       const responseContentToCache = response?.content;
 
+      if (session !== anonymousSessionId) {
+        updateSession("user", userQuery, session);
+        updateSession("assistant", responseContentToCache, session);  
+      }
+
       if (responseContentToCache) {
         redisClient.set(toDbKey(userQuery), responseContentToCache);
-
-        chatHistory.push({ role: "user", content: userQuery });
-        chatHistory.push({ role: "assistant", content: res });
       }
     }
 
-    console.log();
+    console.log(sessions);
   }
 });
 
 expressApp.listen(port, async () => {
   await redisClient.connect();
-  pingMongo().catch(console.dir);
   console.log(`api listening on port ${port}`);
 });
 

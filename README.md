@@ -15,7 +15,6 @@ Built using:
 * ExpressJS
 * Redis
 * OpenAI GPT-3.5 API
-* MongoDB
 
 NodeJS is the language engine to run the API
 
@@ -25,4 +24,20 @@ Redis lets us cache responses to save money on the expensive OpenAI API
 
 OpenAI GPT-3.5 API is used to generate responses
 
-MongoDB is used to saved user chats
+## Routes
+
+`/api/?q=query&v=sessionId`
+
+generates an AI response
+
+`/session/?v=sessionId`
+
+Fetches the session content
+
+`/session/clear/?v=sessionId`
+
+Removed the session
+
+`/session/new`
+
+Requests a new session id from the api
