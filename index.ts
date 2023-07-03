@@ -57,13 +57,17 @@ expressApp.get("/", (_req, res) => {
   res.redirect(process.env.CLIENT_ENDPOINT);
 });
 
-expressApp.get("/api/", async (req, res) => {
+expressApp.post("/api/", async (req, res) => {
   const { query } = req;
 
   const userQuery = query?.q;
 
   const requestBody: RequestBody = req.body;
-  const userHistory = requestBody?.history;
+  let userHistory = requestBody?.history;
+
+  if (!userHistory) {
+    userHistory = [];
+  }
 
   if (!userQuery) {
     res.send("Error 101: Bad format");
