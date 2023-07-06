@@ -42,12 +42,19 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
     return r;
 };
 var _this = this;
+// for functionality
 var _a = require("openai"), Configuration = _a.Configuration, OpenAIApi = _a.OpenAIApi;
 var express = require("express");
-var cors = require("cors");
 var redis = require("redis");
+var cors = require("cors");
+// for logging
 var morgan = require("morgan");
+// for security
+var Ajv = require("ajv");
+var helmet = require("helmet");
+var validator = require('validator');
 require("dotenv").config();
+var ajv = new Ajv();
 var redisClient = redis.createClient();
 var expressApp = express();
 var port = 8080;
@@ -57,21 +64,35 @@ var configuration = new Configuration({
     apiKey: process.env.OPENAI_API_KEY
 });
 var openai = new OpenAIApi(configuration);
-expressApp.use(cors());
-expressApp.use(express.urlencoded({
-    extended: true
-}));
-expressApp.use(express.json());
+// this is used to increase security
+expressApp.use(helmet());
+// this is used to log all incoming requests
 expressApp.use(morgan("dev"));
+// this is used for the development environment
+expressApp.use(cors({
+    origin: "http://localhost:4200"
+}));
 function toDbKey(message) {
+    var sanitizedMessage = validator.whitelist(message, ["a-z", "A-Z", "0-9"]);
     // reducing the message to its most descriptive components increases the chance of a cache hit
-    message = message
-        .trim()
-        .toLowerCase()
-        .replace(/[^\w\s]|_/g, "")
-        .replace(/\s+/g, " ")
-        .replace(" ", "-");
-    return message;
+    return sanitizedMessage.toLowerCase();
+}
+function sanitizeUserInput(data) {
+    var objectSchema = {
+        type: "object",
+        properties: {
+            role: { type: "string" },
+            content: { type: "string" }
+        },
+        required: ["role", "content"],
+        additionalProperties: false
+    };
+    var schema = {
+        type: "array",
+        items: objectSchema
+    };
+    var validate = ajv.compile(schema);
+    return !!validate(data);
 }
 // the root directory should always redirect back to the client site
 // this is to add another client access point and to help users navigate to the correct site
@@ -92,8 +113,10 @@ expressApp.post("/api/", function (req, res) { return __awaiter(_this, void 0, v
                     userHistory = [];
                 }
                 if (!!userQuery) return [3 /*break*/, 1];
-                res.send("Error 101: Bad format");
-                return [3 /*break*/, 7];
+                // while this route does exist, if the user isn't using the official client, we should gas light them into thinking that the /api route doesn't exist
+                res.statusCode = 404;
+                res.end();
+                return [2 /*return*/];
             case 1:
                 console.log("request: " + query.q);
                 return [4 /*yield*/, redisClient.exists(toDbKey(userQuery))];
@@ -111,6 +134,13 @@ expressApp.post("/api/", function (req, res) { return __awaiter(_this, void 0, v
                 return [3 /*break*/, 6];
             case 4:
                 console.debug("fetching new response");
+                if (!sanitizeUserInput(userHistory)) {
+                    console.error("user tried invalid user history input");
+                    // due to hacking attempts, we do not want to send any feedback to the client if its a malformed request
+                    res.statusCode = 400;
+                    res.end();
+                    return [2 /*return*/];
+                }
                 return [4 /*yield*/, openai.createChatCompletion({
                         model: "gpt-3.5-turbo",
                         messages: __spreadArrays(userHistory, [
@@ -135,6 +165,12 @@ expressApp.post("/api/", function (req, res) { return __awaiter(_this, void 0, v
         }
     });
 }); });
+// // Middleware to handle undefined routes
+// expressApp.use((_req, res, _next) => {
+//   // due to hacking attempts, we do not want to send any feedback to the client if its a malformed request
+//   res.statusCode = 404;
+//   res.end();
+// });
 expressApp.listen(port, function () { return __awaiter(_this, void 0, void 0, function () {
     return __generator(this, function (_a) {
         switch (_a.label) {
