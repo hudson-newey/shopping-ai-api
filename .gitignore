@@ -89,7 +89,7 @@ out
 
 # Nuxt.js build / generate output
 .nuxt
-dist
+# dist # we disable this rule so that we don't have to compile server side
 
 # Gatsby files
 .cache/
