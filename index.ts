@@ -2,6 +2,7 @@ const { Configuration, OpenAIApi } = require("openai");
 const express = require("express");
 const cors = require("cors");
 const redis = require("redis");
+const morgan = require("morgan");
 require("dotenv").config();
 
 interface ChatMessage {
@@ -37,6 +38,8 @@ expressApp.use(
     extended: true,
   })
 );
+expressApp.use(express.json());
+expressApp.use(morgan("dev"));
 
 function toDbKey(message: string): string {
   // reducing the message to its most descriptive components increases the chance of a cache hit
