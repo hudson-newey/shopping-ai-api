@@ -165,12 +165,22 @@ expressApp.post("/api/", function (req, res) { return __awaiter(_this, void 0, v
         }
     });
 }); });
-// // Middleware to handle undefined routes
-// expressApp.use((_req, res, _next) => {
-//   // due to hacking attempts, we do not want to send any feedback to the client if its a malformed request
-//   res.statusCode = 404;
-//   res.end();
-// });
+// custom 404
+expressApp.use(function (req, res, next) {
+    if (req.method === 'OPTIONS') {
+        // Exclude OPTION requests from custom 404 page
+        next();
+    }
+    console.error("request tried to access a non-existent endpoint", req.url, req.socket.remoteAddress);
+    res.statusCode = 404;
+    res.end();
+});
+// custom error handler
+expressApp.use(function (err, _req, res, _next) {
+    console.error(err.stack);
+    res.statusCode = 500;
+    res.end();
+});
 expressApp.listen(port, function () { return __awaiter(_this, void 0, void 0, function () {
     return __generator(this, function (_a) {
         switch (_a.label) {

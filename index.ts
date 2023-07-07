@@ -163,12 +163,24 @@ expressApp.post("/api/", async (req, res) => {
   }
 });
 
-// // Middleware to handle undefined routes
-// expressApp.use((_req, res, _next) => {
-//   // due to hacking attempts, we do not want to send any feedback to the client if its a malformed request
-//   res.statusCode = 404;
-//   res.end();
-// });
+// custom 404
+expressApp.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    // Exclude OPTION requests from custom 404 page
+    next();
+  }
+
+  console.error("request tried to access a non-existent endpoint", req.url, req.socket.remoteAddress);
+  res.statusCode = 404;
+  res.end()
+})
+
+// custom error handler
+expressApp.use((err, _req, res, _next) => {
+  console.error(err.stack);
+  res.statusCode = 500;
+  res.end();
+})
 
 expressApp.listen(port, async () => {
   await redisClient.connect();
