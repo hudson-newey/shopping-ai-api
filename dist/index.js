@@ -97,8 +97,14 @@ function sanitizeUserInput(data) {
 // the root directory should always redirect back to the client site
 // this is to add another client access point and to help users navigate to the correct site
 // we may also be able to use this endpoint as a redirect/shortened URL in the future
-expressApp.get("/", function (_req, res) {
-    res.redirect(process.env.CLIENT_ENDPOINT);
+// expressApp.get("/", (_req, res) => {
+//   res.redirect(process.env.CLIENT_ENDPOINT);
+// });
+// we hard code the robots.txt so the api can be isolated from the file system
+var robotsTxt = "User-agent: *\nDisallow: /";
+expressApp.get("/robots.txt", function (_req, res) {
+    res.setHeader("content-type", "text/plain");
+    res.send(robotsTxt);
 });
 expressApp.post("/api/", function (req, res) { return __awaiter(_this, void 0, void 0, function () {
     var query, userQuery, requestBody, userHistory, hasCachedResponse, cachedResponse, chatCompletion, response, responseContentToCache;
