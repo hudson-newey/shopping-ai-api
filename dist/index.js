@@ -52,7 +52,7 @@ var morgan = require("morgan");
 // for security
 var Ajv = require("ajv");
 var helmet = require("helmet");
-var validator = require('validator');
+var validator = require("validator");
 require("dotenv").config();
 var ajv = new Ajv();
 var redisClient = redis.createClient();
@@ -173,7 +173,7 @@ expressApp.post("/api/", function (req, res) { return __awaiter(_this, void 0, v
 }); });
 // custom 404
 expressApp.use(function (req, res, next) {
-    if (req.method === 'OPTIONS') {
+    if (req.method === "OPTIONS") {
         // Exclude OPTION requests from custom 404 page
         next();
     }

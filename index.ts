@@ -10,7 +10,7 @@ const morgan = require("morgan");
 // for security
 const Ajv = require("ajv");
 const helmet = require("helmet");
-const validator = require('validator');
+const validator = require("validator");
 require("dotenv").config();
 
 interface ChatMessage {
@@ -54,31 +54,28 @@ expressApp.use(
 );
 
 function toDbKey(message: string): string {
-  const sanitizedMessage = validator.whitelist(
-    message,
-    ["a-z", "A-Z", "0-9"]
-  );
-  
+  const sanitizedMessage = validator.whitelist(message, ["a-z", "A-Z", "0-9"]);
+
   // reducing the message to its most descriptive components increases the chance of a cache hit
-  return sanitizedMessage.toLowerCase()
+  return sanitizedMessage.toLowerCase();
 }
 
 function sanitizeUserInput(data: object): boolean {
   const objectSchema = {
     type: "object",
     properties: {
-      role: {type: "string"},
-      content: {type: "string"},
+      role: { type: "string" },
+      content: { type: "string" },
     },
     required: ["role", "content"],
     additionalProperties: false,
   };
-  
+
   const schema = {
     type: "array",
     items: objectSchema,
   };
-  
+
   const validate = ajv.compile(schema);
   return !!validate(data);
 }
@@ -172,22 +169,26 @@ expressApp.post("/api/", async (req, res) => {
 
 // custom 404
 expressApp.use((req, res, next) => {
-  if (req.method === 'OPTIONS') {
+  if (req.method === "OPTIONS") {
     // Exclude OPTION requests from custom 404 page
     next();
   }
 
-  console.error("request tried to access a non-existent endpoint", req.url, req.socket.remoteAddress);
+  console.error(
+    "request tried to access a non-existent endpoint",
+    req.url,
+    req.socket.remoteAddress
+  );
   res.statusCode = 404;
-  res.end()
-})
+  res.end();
+});
 
 // custom error handler
 expressApp.use((err, _req, res, _next) => {
   console.error(err.stack);
   res.statusCode = 500;
   res.end();
-})
+});
 
 expressApp.listen(port, async () => {
   await redisClient.connect();
