@@ -1,3 +1,4 @@
+"use strict";
 var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
     function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
     return new (P || (P = Promise))(function (resolve, reject) {
@@ -41,40 +42,36 @@ var __spreadArrays = (this && this.__spreadArrays) || function () {
             r[k] = a[j];
     return r;
 };
-var _this = this;
-// for functionality
-var _a = require("openai"), Configuration = _a.Configuration, OpenAIApi = _a.OpenAIApi;
-var express = require("express");
-var redis = require("redis");
-var cors = require("cors");
-// for logging
-var morgan = require("morgan");
-// for security
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+exports.__esModule = true;
+var express_1 = __importDefault(require("express"));
+var openai_1 = require("openai");
+var cors_1 = __importDefault(require("cors"));
+var morgan_1 = __importDefault(require("morgan"));
+var helmet_1 = __importDefault(require("helmet"));
+var validator_1 = __importDefault(require("validator"));
 var Ajv = require("ajv");
-var helmet = require("helmet");
-var validator = require("validator");
 require("dotenv").config();
+var redis = require("redis");
 var ajv = new Ajv();
 var redisClient = redis.createClient();
-var expressApp = express();
+var expressApp = express_1["default"]();
 var port = 8080;
 var promptPrepend = "what items from amazon would i need for ";
-var promptAppend = ". list the items in numbered bullet points using the \\nx: format";
-var configuration = new Configuration({
+var promptAppend = ". list the items in numbered bullet points using the \\nx: format (new line number: item name). Give a bit of an explanation for each item";
+var configuration = new openai_1.Configuration({
     apiKey: process.env.OPENAI_API_KEY
 });
-var openai = new OpenAIApi(configuration);
-// this is used to increase security
-expressApp.use(helmet());
-// this is used to log all incoming requests
-expressApp.use(morgan("dev"));
-// this is used for the development environment
-expressApp.use(cors({
+var openai = new openai_1.OpenAIApi(configuration);
+expressApp.use(helmet_1["default"]());
+expressApp.use(morgan_1["default"]("dev"));
+expressApp.use(cors_1["default"]({
     origin: "http://localhost:4200"
 }));
 function toDbKey(message) {
-    var sanitizedMessage = validator.whitelist(message, ["a-z", "A-Z", "0-9"]);
-    // reducing the message to its most descriptive components increases the chance of a cache hit
+    var sanitizedMessage = validator_1["default"].whitelist(message, "a-zA-Z0-9");
     return sanitizedMessage.toLowerCase();
 }
 function sanitizeUserInput(data) {
@@ -94,107 +91,94 @@ function sanitizeUserInput(data) {
     var validate = ajv.compile(schema);
     return !!validate(data);
 }
-// the root directory should always redirect back to the client site
-// this is to add another client access point and to help users navigate to the correct site
-// we may also be able to use this endpoint as a redirect/shortened URL in the future
-// expressApp.get("/", (_req, res) => {
-//   res.redirect(process.env.CLIENT_ENDPOINT);
-// });
-// we hard code the robots.txt so the api can be isolated from the file system
 var robotsTxt = "User-agent: *\nDisallow: /";
 expressApp.get("/robots.txt", function (_req, res) {
     res.setHeader("content-type", "text/plain");
     res.send(robotsTxt);
 });
-expressApp.post("/api/", function (req, res) { return __awaiter(_this, void 0, void 0, function () {
+expressApp.post("/api/", function (req, res) { return __awaiter(void 0, void 0, void 0, function () {
     var query, userQuery, requestBody, userHistory, hasCachedResponse, cachedResponse, chatCompletion, response, responseContentToCache;
-    return __generator(this, function (_a) {
-        switch (_a.label) {
+    var _a;
+    return __generator(this, function (_b) {
+        switch (_b.label) {
             case 0:
                 query = req.query;
-                userQuery = query === null || query === void 0 ? void 0 : query.q;
+                userQuery = (_a = query === null || query === void 0 ? void 0 : query.q) === null || _a === void 0 ? void 0 : _a.toString();
                 requestBody = req.body;
                 userHistory = requestBody === null || requestBody === void 0 ? void 0 : requestBody.history;
                 if (!userHistory) {
                     userHistory = [];
                 }
-                if (!!userQuery) return [3 /*break*/, 1];
-                // while this route does exist, if the user isn't using the official client, we should gas light them into thinking that the /api route doesn't exist
+                if (!!userQuery) return [3, 1];
                 res.statusCode = 404;
                 res.end();
-                return [2 /*return*/];
+                return [2];
             case 1:
                 console.log("request: " + query.q);
-                return [4 /*yield*/, redisClient.exists(toDbKey(userQuery))];
+                return [4, redisClient.exists(toDbKey(userQuery))];
             case 2:
-                hasCachedResponse = _a.sent();
-                if (!hasCachedResponse) return [3 /*break*/, 4];
+                hasCachedResponse = (_b.sent()) === 1;
+                if (!hasCachedResponse) return [3, 4];
                 console.debug("using cached response");
-                return [4 /*yield*/, redisClient.get(toDbKey(userQuery))];
+                return [4, redisClient.get(toDbKey(userQuery))];
             case 3:
-                cachedResponse = _a.sent();
+                cachedResponse = _b.sent();
                 res.send({
                     role: "cache",
                     content: cachedResponse
                 });
-                return [3 /*break*/, 6];
+                return [3, 6];
             case 4:
                 console.debug("fetching new response");
                 if (!sanitizeUserInput(userHistory)) {
                     console.error("user tried invalid user history input");
-                    // due to hacking attempts, we do not want to send any feedback to the client if its a malformed request
                     res.statusCode = 400;
                     res.end();
-                    return [2 /*return*/];
+                    return [2];
                 }
-                return [4 /*yield*/, openai.createChatCompletion({
+                return [4, openai.createChatCompletion({
                         model: "gpt-3.5-turbo",
                         messages: __spreadArrays(userHistory, [
-                            { role: "user", content: promptPrepend + userQuery + promptPrepend },
+                            { role: openai_1.ChatCompletionRequestMessageRoleEnum.User, content: promptPrepend + userQuery + promptAppend },
                         ])
                     })];
             case 5:
-                chatCompletion = _a.sent();
+                chatCompletion = _b.sent();
                 response = chatCompletion.data.choices[0].message;
-                // send back the response to the user
                 res.send(response);
                 responseContentToCache = response === null || response === void 0 ? void 0 : response.content;
                 if (responseContentToCache) {
                     redisClient.set(toDbKey(userQuery), responseContentToCache);
                 }
-                _a.label = 6;
+                _b.label = 6;
             case 6:
-                // for new line character
                 console.log();
-                _a.label = 7;
-            case 7: return [2 /*return*/];
+                _b.label = 7;
+            case 7: return [2];
         }
     });
 }); });
-// custom 404
 expressApp.use(function (req, res, next) {
     if (req.method === "OPTIONS") {
-        // Exclude OPTION requests from custom 404 page
         next();
     }
     console.error("request tried to access a non-existent endpoint", req.url, req.socket.remoteAddress);
     res.statusCode = 404;
     res.end();
 });
-// custom error handler
 expressApp.use(function (err, _req, res, _next) {
     console.error(err.stack);
     res.statusCode = 500;
     res.end();
 });
-expressApp.listen(port, function () { return __awaiter(_this, void 0, void 0, function () {
+expressApp.listen(port, function () { return __awaiter(void 0, void 0, void 0, function () {
     return __generator(this, function (_a) {
         switch (_a.label) {
-            case 0: return [4 /*yield*/, redisClient.connect()];
+            case 0: return [4, redisClient.connect()];
             case 1:
                 _a.sent();
                 console.log("api listening on port " + port);
-                return [2 /*return*/];
+                return [2];
         }
     });
 }); });

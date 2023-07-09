@@ -1,30 +1,18 @@
-// for functionality
-const { Configuration, OpenAIApi } = require("openai");
-const express = require("express");
-const redis = require("redis");
-const cors = require("cors");
+import express, { Request, Response, NextFunction } from "express";
+import { ChatCompletionRequestMessage, ChatCompletionRequestMessageRoleEnum, Configuration, OpenAIApi } from "openai";
+import cors from "cors";
+import morgan from "morgan";
+import helmet from "helmet";
+import validator from "validator";
 
-// for logging
-const morgan = require("morgan");
 
 // for security
 const Ajv = require("ajv");
-const helmet = require("helmet");
-const validator = require("validator");
 require("dotenv").config();
-
-interface ChatMessage {
-  role: string;
-  content: string;
-}
-
-interface Session {
-  id: string;
-  history: ChatMessage[];
-}
+const redis = require("redis");
 
 interface RequestBody {
-  history: ChatMessage[];
+  history: ChatCompletionRequestMessage[];
 }
 
 const ajv = new Ajv();
@@ -35,7 +23,7 @@ const port = 8080;
 
 const promptPrepend = "what items from amazon would i need for ";
 const promptAppend =
-  ". list the items in numbered bullet points using the \\nx: format";
+  ". list the items in numbered bullet points using the \\nx: format (new line number: item name). Give a bit of an explanation for each item";
 
 const configuration = new Configuration({
   apiKey: process.env.OPENAI_API_KEY,
@@ -54,7 +42,7 @@ expressApp.use(
 );
 
 function toDbKey(message: string): string {
-  const sanitizedMessage = validator.whitelist(message, ["a-z", "A-Z", "0-9"]);
+  const sanitizedMessage = validator.whitelist(message, "a-zA-Z0-9");
 
   // reducing the message to its most descriptive components increases the chance of a cache hit
   return sanitizedMessage.toLowerCase();
@@ -97,7 +85,7 @@ expressApp.get("/robots.txt", (_req, res) => {
 expressApp.post("/api/", async (req, res) => {
   const { query } = req;
 
-  const userQuery = query?.q;
+  const userQuery = query?.q?.toString();
 
   const requestBody: RequestBody = req.body;
   let userHistory = requestBody?.history;
@@ -117,7 +105,7 @@ expressApp.post("/api/", async (req, res) => {
     // check if the response has been cached
     const hasCachedResponse: boolean = await redisClient.exists(
       toDbKey(userQuery)
-    );
+    ) === 1;
 
     // if the response has not been cached, we fetch a new response and cache it
     if (hasCachedResponse) {
@@ -145,7 +133,7 @@ expressApp.post("/api/", async (req, res) => {
         model: "gpt-3.5-turbo",
         messages: [
           ...userHistory,
-          { role: "user", content: promptPrepend + userQuery + promptPrepend },
+          { role: ChatCompletionRequestMessageRoleEnum.User, content: promptPrepend + userQuery + promptAppend },
         ],
       });
 
@@ -184,7 +172,7 @@ expressApp.use((req, res, next) => {
 });
 
 // custom error handler
-expressApp.use((err, _req, res, _next) => {
+expressApp.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error(err.stack);
   res.statusCode = 500;
   res.end();
@@ -195,4 +183,4 @@ expressApp.listen(port, async () => {
   console.log(`api listening on port ${port}`);
 });
 
-redisClient.on("error", (err) => console.log("Redis Client Error", err));
+redisClient.on("error", (err: Error) => console.log("Redis Client Error", err));
