@@ -1,10 +1,14 @@
 import express, { Request, Response, NextFunction } from "express";
-import { ChatCompletionRequestMessage, ChatCompletionRequestMessageRoleEnum, Configuration, OpenAIApi } from "openai";
+import {
+  ChatCompletionRequestMessage,
+  ChatCompletionRequestMessageRoleEnum,
+  Configuration,
+  OpenAIApi,
+} from "openai";
 import cors from "cors";
 import morgan from "morgan";
 import helmet from "helmet";
 import validator from "validator";
-
 
 // for security
 const Ajv = require("ajv");
@@ -12,7 +16,8 @@ require("dotenv").config();
 const redis = require("redis");
 
 interface RequestBody {
-  history: ChatCompletionRequestMessage[];
+  history?: ChatCompletionRequestMessage[];
+  q?: string;
 }
 
 const ajv = new Ajv();
@@ -28,7 +33,7 @@ const promptAppend =
 const configuration = new Configuration({
   apiKey: process.env.OPENAI_API_KEY,
 });
-const openai = new OpenAIApi(configuration);
+const openAiService = new OpenAIApi(configuration);
 
 // this is used to increase security
 expressApp.use(helmet());
@@ -84,11 +89,17 @@ expressApp.get("/robots.txt", (_req, res) => {
 
 expressApp.post("/api/", async (req, res) => {
   const { query } = req;
-
-  const userQuery = query?.q?.toString();
-
   const requestBody: RequestBody = req.body;
-  let userHistory = requestBody?.history;
+
+  let userQuery: string | undefined = query?.q?.toString();
+
+  if (userQuery === undefined) {
+    if (requestBody?.q) {
+      userQuery = requestBody.q;
+    }
+  }
+
+  let userHistory: ChatCompletionRequestMessage[] | undefined = requestBody?.history;
 
   if (!userHistory) {
     userHistory = [];
@@ -103,9 +114,8 @@ expressApp.post("/api/", async (req, res) => {
     console.log(`request: ${query.q}`);
 
     // check if the response has been cached
-    const hasCachedResponse: boolean = await redisClient.exists(
-      toDbKey(userQuery)
-    ) === 1;
+    const hasCachedResponse: boolean =
+      (await redisClient.exists(toDbKey(userQuery))) === 1;
 
     // if the response has not been cached, we fetch a new response and cache it
     if (hasCachedResponse) {
@@ -129,11 +139,14 @@ expressApp.post("/api/", async (req, res) => {
       }
 
       // fetch a new response from the api
-      const chatCompletion = await openai.createChatCompletion({
+      const chatCompletion = await openAiService.createChatCompletion({
         model: "gpt-3.5-turbo",
         messages: [
           ...userHistory,
-          { role: ChatCompletionRequestMessageRoleEnum.User, content: promptPrepend + userQuery + promptAppend },
+          {
+            role: ChatCompletionRequestMessageRoleEnum.User,
+            content: promptPrepend + userQuery + promptAppend,
+          },
         ],
       });
 
@@ -172,11 +185,13 @@ expressApp.use((req, res, next) => {
 });
 
 // custom error handler
-expressApp.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error(err.stack);
-  res.statusCode = 500;
-  res.end();
-});
+expressApp.use(
+  (err: Error, _req: Request, res: Response, _next: NextFunction) => {
+    console.error(err.stack);
+    res.statusCode = 500;
+    res.end();
+  }
+);
 
 expressApp.listen(port, async () => {
   await redisClient.connect();

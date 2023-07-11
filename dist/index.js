@@ -64,7 +64,7 @@ var promptAppend = ". list the items in numbered bullet points using the \\nx: f
 var configuration = new openai_1.Configuration({
     apiKey: process.env.OPENAI_API_KEY
 });
-var openai = new openai_1.OpenAIApi(configuration);
+var openAiService = new openai_1.OpenAIApi(configuration);
 expressApp.use(helmet_1["default"]());
 expressApp.use(morgan_1["default"]("dev"));
 expressApp.use(cors_1["default"]({
@@ -97,14 +97,19 @@ expressApp.get("/robots.txt", function (_req, res) {
     res.send(robotsTxt);
 });
 expressApp.post("/api/", function (req, res) { return __awaiter(void 0, void 0, void 0, function () {
-    var query, userQuery, requestBody, userHistory, hasCachedResponse, cachedResponse, chatCompletion, response, responseContentToCache;
+    var query, requestBody, userQuery, userHistory, hasCachedResponse, cachedResponse, chatCompletion, response, responseContentToCache;
     var _a;
     return __generator(this, function (_b) {
         switch (_b.label) {
             case 0:
                 query = req.query;
-                userQuery = (_a = query === null || query === void 0 ? void 0 : query.q) === null || _a === void 0 ? void 0 : _a.toString();
                 requestBody = req.body;
+                userQuery = (_a = query === null || query === void 0 ? void 0 : query.q) === null || _a === void 0 ? void 0 : _a.toString();
+                if (userQuery === undefined) {
+                    if (requestBody === null || requestBody === void 0 ? void 0 : requestBody.q) {
+                        userQuery = requestBody.q;
+                    }
+                }
                 userHistory = requestBody === null || requestBody === void 0 ? void 0 : requestBody.history;
                 if (!userHistory) {
                     userHistory = [];
@@ -136,10 +141,13 @@ expressApp.post("/api/", function (req, res) { return __awaiter(void 0, void 0, 
                     res.end();
                     return [2];
                 }
-                return [4, openai.createChatCompletion({
+                return [4, openAiService.createChatCompletion({
                         model: "gpt-3.5-turbo",
                         messages: __spreadArrays(userHistory, [
-                            { role: openai_1.ChatCompletionRequestMessageRoleEnum.User, content: promptPrepend + userQuery + promptAppend },
+                            {
+                                role: openai_1.ChatCompletionRequestMessageRoleEnum.User,
+                                content: promptPrepend + userQuery + promptAppend
+                            },
                         ])
                     })];
             case 5:

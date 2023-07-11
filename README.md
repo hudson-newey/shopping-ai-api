@@ -26,18 +26,39 @@ OpenAI GPT-3.5 API is used to generate responses
 
 ## Routes
 
-`/api/?q=query&v=sessionId`
+### Requesting a response with query string parameters + history
 
-generates an AI response
+```json
+POST /api/?q=query
+{
+    history: [
+        { role: "user", content: "this is a request" },
+        { role: "assistant", content: "this is a response" }
+        { role: "user", content: "this is another request" }
+    ]
+}
+```
 
-`/session/?v=sessionId`
+### Requesting a response with request in body
 
-Fetches the session content
+```json
+POST /api/
+{
+    history: [
+        { role: "user", content: "this is a request" },
+        { role: "assistant", content: "this is a response" }
+        { role: "user", content: "this is another request" }
+    ],
+    q: "query"
+}
+```
 
-`/session/clear/?v=sessionId`
+### Requesting robots.txt
 
-Removed the session
+```JSON
+GET /robots.txt
+```
 
-`/session/new`
+### All other routes
 
-Requests a new session id from the api
+All other routes will return a 404 status code without any content or pages. This is done to prevent hackers
