@@ -15,6 +15,8 @@ const Ajv = require("ajv");
 require("dotenv").config();
 const redis = require("redis");
 
+const isDevelopment: boolean = process.env.DEVELOPMENT === "true";
+
 interface RequestBody {
   history?: ChatCompletionRequestMessage[];
   q?: string;
@@ -124,7 +126,7 @@ expressApp.post("/api/", async (req, res) => {
       const cachedResponse = await redisClient.get(toDbKey(userQuery));
 
       res.send({
-        role: "cache",
+        role: ChatCompletionRequestMessageRoleEnum.Assistant,
         content: cachedResponse,
       });
     } else {
@@ -137,6 +139,8 @@ expressApp.post("/api/", async (req, res) => {
         res.end();
         return;
       }
+
+      console.log(userHistory);
 
       // fetch a new response from the api
       const chatCompletion = await openAiService.createChatCompletion({

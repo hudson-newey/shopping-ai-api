@@ -28,7 +28,7 @@ OpenAI GPT-3.5 API is used to generate responses
 
 ### Requesting a response with query string parameters + history
 
-```json
+```js
 POST /api/?q=query
 {
     history: [
@@ -41,7 +41,7 @@ POST /api/?q=query
 
 ### Requesting a response with request in body
 
-```json
+```js
 POST /api/
 {
     history: [
@@ -55,10 +55,18 @@ POST /api/
 
 ### Requesting robots.txt
 
-```JSON
+```js
 GET /robots.txt
 ```
 
 ### All other routes
 
 All other routes will return a 404 status code without any content or pages. This is done to prevent hackers
+
+## Environment Variables
+
+`OPENAI_API_KEY`=your open ai api key. get it here: https://platform.openai.com/
+
+`CLIENT_ENDPOINT`=if a user tries to access the root directory, where should they go?
+
+`DEVELOPMENT`=determines if non-cached responses are fetches from the openai API. This is done to reduce costs

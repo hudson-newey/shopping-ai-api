@@ -55,6 +55,7 @@ var validator_1 = __importDefault(require("validator"));
 var Ajv = require("ajv");
 require("dotenv").config();
 var redis = require("redis");
+var isDevelopment = process.env.DEVELOPMENT === "true";
 var ajv = new Ajv();
 var redisClient = redis.createClient();
 var expressApp = express_1["default"]();
@@ -129,7 +130,7 @@ expressApp.post("/api/", function (req, res) { return __awaiter(void 0, void 0, 
             case 3:
                 cachedResponse = _b.sent();
                 res.send({
-                    role: "cache",
+                    role: openai_1.ChatCompletionRequestMessageRoleEnum.Assistant,
                     content: cachedResponse
                 });
                 return [3, 6];
@@ -141,6 +142,7 @@ expressApp.post("/api/", function (req, res) { return __awaiter(void 0, void 0, 
                     res.end();
                     return [2];
                 }
+                console.log(userHistory);
                 return [4, openAiService.createChatCompletion({
                         model: "gpt-3.5-turbo",
                         messages: __spreadArrays(userHistory, [
