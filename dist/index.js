@@ -57,7 +57,7 @@ require("dotenv").config();
 var redis = require("redis");
 var isDevelopment = process.env.DEVELOPMENT === "true";
 var ajv = new Ajv();
-var redisClient = redis.createClient();
+var redisClient = isRedisEnabled() ? redis.createClient() : undefined;
 var expressApp = express_1["default"]();
 var port = 8080;
 var promptPrepend = "what items from amazon would i need for ";
@@ -92,20 +92,23 @@ function sanitizeUserInput(data) {
     var validate = ajv.compile(schema);
     return !!validate(data);
 }
+function isRedisEnabled() {
+    return process.env.REDIS_ENABLED === "true";
+}
 var robotsTxt = "User-agent: *\nDisallow: /";
 expressApp.get("/robots.txt", function (_req, res) {
     res.setHeader("content-type", "text/plain");
     res.send(robotsTxt);
 });
 expressApp.post("/api/", function (req, res) { return __awaiter(void 0, void 0, void 0, function () {
-    var query, requestBody, userQuery, userHistory, hasCachedResponse, cachedResponse, chatCompletion, response, responseContentToCache;
-    var _a;
-    return __generator(this, function (_b) {
-        switch (_b.label) {
+    var query, requestBody, userQuery, userHistory, hasCachedResponse, _a, cachedResponse, chatCompletion, response, responseContentToCache, fakeResponse;
+    var _b;
+    return __generator(this, function (_c) {
+        switch (_c.label) {
             case 0:
                 query = req.query;
                 requestBody = req.body;
-                userQuery = (_a = query === null || query === void 0 ? void 0 : query.q) === null || _a === void 0 ? void 0 : _a.toString();
+                userQuery = (_b = query === null || query === void 0 ? void 0 : query.q) === null || _b === void 0 ? void 0 : _b.toString();
                 if (userQuery === undefined) {
                     if (requestBody === null || requestBody === void 0 ? void 0 : requestBody.q) {
                         userQuery = requestBody.q;
@@ -121,20 +124,27 @@ expressApp.post("/api/", function (req, res) { return __awaiter(void 0, void 0, 
                 return [2];
             case 1:
                 console.log("request: " + query.q);
+                if (!isRedisEnabled()) return [3, 3];
                 return [4, redisClient.exists(toDbKey(userQuery))];
             case 2:
-                hasCachedResponse = (_b.sent()) === 1;
-                if (!hasCachedResponse) return [3, 4];
+                _a = (_c.sent()) === 1;
+                return [3, 4];
+            case 3:
+                _a = false;
+                _c.label = 4;
+            case 4:
+                hasCachedResponse = _a;
+                if (!hasCachedResponse) return [3, 6];
                 console.debug("using cached response");
                 return [4, redisClient.get(toDbKey(userQuery))];
-            case 3:
-                cachedResponse = _b.sent();
+            case 5:
+                cachedResponse = _c.sent();
                 res.send({
                     role: openai_1.ChatCompletionRequestMessageRoleEnum.Assistant,
                     content: cachedResponse
                 });
-                return [3, 6];
-            case 4:
+                return [3, 9];
+            case 6:
                 console.debug("fetching new response");
                 if (!sanitizeUserInput(userHistory)) {
                     console.error("user tried invalid user history input");
@@ -143,6 +153,7 @@ expressApp.post("/api/", function (req, res) { return __awaiter(void 0, void 0, 
                     return [2];
                 }
                 console.log(userHistory);
+                if (!!isDevelopment) return [3, 8];
                 return [4, openAiService.createChatCompletion({
                         model: "gpt-3.5-turbo",
                         messages: __spreadArrays(userHistory, [
@@ -152,19 +163,28 @@ expressApp.post("/api/", function (req, res) { return __awaiter(void 0, void 0, 
                             },
                         ])
                     })];
-            case 5:
-                chatCompletion = _b.sent();
+            case 7:
+                chatCompletion = _c.sent();
                 response = chatCompletion.data.choices[0].message;
                 res.send(response);
                 responseContentToCache = response === null || response === void 0 ? void 0 : response.content;
                 if (responseContentToCache) {
-                    redisClient.set(toDbKey(userQuery), responseContentToCache);
+                    if (isRedisEnabled()) {
+                        redisClient.set(toDbKey(userQuery), responseContentToCache);
+                    }
                 }
-                _b.label = 6;
-            case 6:
+                return [3, 9];
+            case 8:
+                fakeResponse = {
+                    role: "assistant",
+                    content: "fake API response (due to server development mode)"
+                };
+                res.send(fakeResponse);
+                _c.label = 9;
+            case 9:
                 console.log();
-                _b.label = 7;
-            case 7: return [2];
+                _c.label = 10;
+            case 10: return [2];
         }
     });
 }); });
@@ -184,12 +204,18 @@ expressApp.use(function (err, _req, res, _next) {
 expressApp.listen(port, function () { return __awaiter(void 0, void 0, void 0, function () {
     return __generator(this, function (_a) {
         switch (_a.label) {
-            case 0: return [4, redisClient.connect()];
+            case 0:
+                if (!isRedisEnabled()) return [3, 2];
+                return [4, redisClient.connect()];
             case 1:
                 _a.sent();
+                _a.label = 2;
+            case 2:
                 console.log("api listening on port " + port);
                 return [2];
         }
     });
 }); });
-redisClient.on("error", function (err) { return console.log("Redis Client Error", err); });
+if (isRedisEnabled()) {
+    redisClient.on("error", function (err) { return console.log("Redis Client Error", err); });
+}

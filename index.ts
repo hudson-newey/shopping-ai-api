@@ -2,6 +2,7 @@ import express, { Request, Response, NextFunction } from "express";
 import {
   ChatCompletionRequestMessage,
   ChatCompletionRequestMessageRoleEnum,
+  ChatCompletionResponseMessage,
   Configuration,
   OpenAIApi,
 } from "openai";
@@ -24,7 +25,7 @@ interface RequestBody {
 
 const ajv = new Ajv();
 
-const redisClient = redis.createClient();
+const redisClient = isRedisEnabled() ? redis.createClient() : undefined;
 const expressApp = express();
 const port = 8080;
 
@@ -75,6 +76,10 @@ function sanitizeUserInput(data: object): boolean {
   return !!validate(data);
 }
 
+function isRedisEnabled(): boolean {
+  return process.env.REDIS_ENABLED === "true";
+}
+
 // the root directory should always redirect back to the client site
 // this is to add another client access point and to help users navigate to the correct site
 // we may also be able to use this endpoint as a redirect/shortened URL in the future
@@ -101,7 +106,8 @@ expressApp.post("/api/", async (req, res) => {
     }
   }
 
-  let userHistory: ChatCompletionRequestMessage[] | undefined = requestBody?.history;
+  let userHistory: ChatCompletionRequestMessage[] | undefined =
+    requestBody?.history;
 
   if (!userHistory) {
     userHistory = [];
@@ -116,8 +122,9 @@ expressApp.post("/api/", async (req, res) => {
     console.log(`request: ${query.q}`);
 
     // check if the response has been cached
-    const hasCachedResponse: boolean =
-      (await redisClient.exists(toDbKey(userQuery))) === 1;
+    const hasCachedResponse: boolean = isRedisEnabled()
+      ? (await redisClient.exists(toDbKey(userQuery))) === 1
+      : false;
 
     // if the response has not been cached, we fetch a new response and cache it
     if (hasCachedResponse) {
@@ -142,28 +149,42 @@ expressApp.post("/api/", async (req, res) => {
 
       console.log(userHistory);
 
-      // fetch a new response from the api
-      const chatCompletion = await openAiService.createChatCompletion({
-        model: "gpt-3.5-turbo",
-        messages: [
-          ...userHistory,
-          {
-            role: ChatCompletionRequestMessageRoleEnum.User,
-            content: promptPrepend + userQuery + promptAppend,
-          },
-        ],
-      });
+      if (!isDevelopment) {
+        // fetch a new response from the api
 
-      const response = chatCompletion.data.choices[0].message;
+        const chatCompletion = await openAiService.createChatCompletion({
+          model: "gpt-3.5-turbo",
+          messages: [
+            ...userHistory,
+            {
+              role: ChatCompletionRequestMessageRoleEnum.User,
+              content: promptPrepend + userQuery + promptAppend,
+            },
+          ],
+        });
 
-      // send back the response to the user
-      res.send(response);
+        const response = chatCompletion.data.choices[0].message;
 
-      // cache the response
-      const responseContentToCache = response?.content;
+        // send back the response to the user
+        res.send(response);
 
-      if (responseContentToCache) {
-        redisClient.set(toDbKey(userQuery), responseContentToCache);
+        // cache the response
+        const responseContentToCache = response?.content;
+
+        if (responseContentToCache) {
+          if (isRedisEnabled()) {
+            redisClient.set(toDbKey(userQuery), responseContentToCache);
+          }
+        }
+      } else {
+        // use fake response for development
+
+        const fakeResponse: ChatCompletionResponseMessage = {
+          role: "assistant",
+          content: "fake API response (due to server development mode)",
+        };
+
+        res.send(fakeResponse);
       }
     }
 
@@ -198,8 +219,13 @@ expressApp.use(
 );
 
 expressApp.listen(port, async () => {
-  await redisClient.connect();
+  if (isRedisEnabled()) {
+    await redisClient.connect();
+  }
+
   console.log(`api listening on port ${port}`);
 });
 
-redisClient.on("error", (err: Error) => console.log("Redis Client Error", err));
+if (isRedisEnabled()) {
+  redisClient.on("error", (err: Error) => console.log("Redis Client Error", err));
+}
