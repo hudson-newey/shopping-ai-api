@@ -69,7 +69,7 @@ var openAiService = new openai_1.OpenAIApi(configuration);
 expressApp.use(helmet_1["default"]());
 expressApp.use(morgan_1["default"]("dev"));
 expressApp.use(cors_1["default"]({
-    origin: "http://localhost:4200"
+    origin: process.env.CLIENT_ENDPOINT
 }));
 function toDbKey(message) {
     var sanitizedMessage = validator_1["default"].whitelist(message, "a-zA-Z0-9");
@@ -155,7 +155,7 @@ expressApp.post("/api/", function (req, res) { return __awaiter(void 0, void 0, 
                 console.log(userHistory);
                 if (!!isDevelopment) return [3, 8];
                 return [4, openAiService.createChatCompletion({
-                        model: "gpt-3.5-turbo",
+                        model: process.env.OPENAI_MODEL,
                         messages: __spreadArrays(userHistory, [
                             {
                                 role: openai_1.ChatCompletionRequestMessageRoleEnum.User,
@@ -217,5 +217,7 @@ expressApp.listen(port, function () { return __awaiter(void 0, void 0, void 0, f
     });
 }); });
 if (isRedisEnabled()) {
-    redisClient.on("error", function (err) { return console.log("Redis Client Error", err); });
+    redisClient.on("error", function (err) {
+        return console.log("Redis Client Error", err);
+    });
 }

@@ -45,7 +45,7 @@ expressApp.use(morgan("dev"));
 // this is used for the development environment
 expressApp.use(
   cors({
-    origin: "http://localhost:4200",
+    origin: process.env.CLIENT_ENDPOINT,
   })
 );
 
@@ -153,7 +153,7 @@ expressApp.post("/api/", async (req, res) => {
         // fetch a new response from the api
 
         const chatCompletion = await openAiService.createChatCompletion({
-          model: "gpt-3.5-turbo",
+          model: process.env.OPENAI_MODEL as string,
           messages: [
             ...userHistory,
             {
@@ -227,5 +227,7 @@ expressApp.listen(port, async () => {
 });
 
 if (isRedisEnabled()) {
-  redisClient.on("error", (err: Error) => console.log("Redis Client Error", err));
+  redisClient.on("error", (err: Error) =>
+    console.log("Redis Client Error", err)
+  );
 }
