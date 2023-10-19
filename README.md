@@ -1,5 +1,7 @@
 # AI Shopper API
 
+Should be run in combination with [hudson-newey/shopping-ai-client](https://github.com/hudson-newey/shopping-ai-client)
+
 To build: Install and enable the compile hero vsCode extension
 
 To run:
